@@ -1,0 +1,24 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "subscriptionId": { "value": "b4d336fa-0b20-4299-ab48-04c67f2f19a4" },
+    "resourceGroupName": { "value": "RG-Keita" },
+    "location": { "value": "Canada Central" },
+    "webAppName": { "value": "WebAppKeita" },
+    "hostingPlanName": { "value": "plan-de-Keita" },
+    "serverFarmResourceGroup": { "value": "RG-Keita" },
+    "alwaysOn": { "value": true },
+    "ftpsState": { "value": "FtpsOnly" },
+    "keyVaultName": { "value": "Keita-KeyVault" },
+    "keyVaultSku": { "value": "Standard" },
+    "tenant": { "value": "9bfd0515-8e76-4d90-821a-2cb5fd0318a8" },
+    "enableRbacAuthorization": { "value": true },
+    "accessPolicies": { "value": [] },
+    "enableSoftDelete": { "value": true },
+    "softDeleteRetentionInDays": { "value": 90 },
+    "publicNetworkAccess": { "value": "Enabled" },
+    "secretName": { "value": "Gellazca" },
+    "secretValue": { "value": "" }
+  }
+}

@@ -1,0 +1,154 @@
+﻿trigger:
+- master
+
+pool:
+  name: Default
+# Variables globales utilisées dans tout le pipeline.
+variables:
+- name: AzureSubscription
+  value: 'Azure subscription 1(17454606-09a9-4347-8fcd-4dbaf336304f)'
+- name: SubID
+  value: '17454606-09a9-4347-8fcd-4dbaf336304f'
+- name: RG_Location
+  value: 'Canada Central'
+- name: RG_location
+  value: 'canadacentral'
+- name: hostingPlanName
+  value: 'plan-de-Keita'
+- name: webAppName
+  value: 'WebAppKeita'
+- name: keyVaultName
+  value: 'Keita-KeyVault'
+- name: buildConfiguration
+  value: 'Release'
+- name: artifactName
+  value: 'Devoir2-win-x64'
+- name: resourceGroupName
+  value: 'RG-Keita'
+- name: location
+  value: 'canadacentral'
+- name: gellaDeployment
+  value: false   # mettre true pour la première fois pour production et false pour stagin
+
+
+##############################################
+#                BUILD STAGE                 
+##############################################
+# Compile et publie le projet ASP.NET Core.
+# Génère un artefact ZIP prêt à être déployé.
+# Première étape obligatoire avant tout déploiement.
+
+stages:
+- stage: Build
+  displayName: "Build du site ASP.NET Core"
+  jobs:
+  - job: BuildJob
+    pool:
+      name: 'Default'
+    steps:
+     # Récupère le code du dépôt.
+    - checkout: self
+
+    - task: DotNetCoreCLI@2
+      displayName: "Build du projet"
+      inputs:
+        command: 'build'
+        projects: 'WebApp/WebApp.csproj'
+        arguments: '--configuration $(buildConfiguration)'
+
+    - task: DotNetCoreCLI@2
+      displayName: "Publish du projet"
+      inputs:
+        command: 'publish'
+        publishWebProjects: true
+        projects: 'WebApp/WebApp.csproj'
+        arguments: '--configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/publish'
+        # Création automatique du zip.
+        zipAfterPublish: true
+
+    - task: PublishBuildArtifacts@1
+      inputs:
+        PathtoPublish: '$(Build.ArtifactStagingDirectory)/publish'
+        ArtifactName: 'Devoir2-win-x64'
+        publishLocation: 'Container'
+
+
+##############################################
+#           INFRASTRUCTURE DEPLOY            
+##############################################
+# Déploie automatiquement l’infrastructure Azure (App Service, plan).
+# Utilise un template ARM pour créer les ressources.
+# S’exécute avant le déploiement de l’application.
+
+- stage: DeployInfra
+  displayName: "Déploiement ARM Template"
+  dependsOn: Build
+  jobs:
+  - job: InfraDeploy
+    pool:
+      name: 'Default'
+    steps:
+    - checkout: self
+
+    - task: AzureResourceManagerTemplateDeployment@3
+      displayName: "Déploiement de l’infrastructure Azure"
+      inputs:
+        deploymentScope: 'Resource Group'
+        azureResourceManagerConnection: '$(AzureSubscription)'
+        subscriptionId: '$(SubID)'
+        action: 'Create Or Update Resource Group'
+        resourceGroupName: '$(resourceGroupName)'
+        location: '$(location)'
+        templateLocation: 'Linked artifact'
+        csmFile: '$(Build.SourcesDirectory)/Appservice/azuredeploy.json'
+        csmParametersFile: '$(Build.SourcesDirectory)/Appservice/azuredeploy.parameters.json'
+        deploymentMode: 'Incremental'
+
+
+##############################################
+#              DEPLOY WEB APP                
+##############################################
+# Télécharge l’artefact et déploie la WebApp.
+# Gère automatiquement Prod ou Staging selon la variable firstDeployment.
+# Étape finale : mise en ligne de l’application.
+
+- stage: DeployWebApp
+  displayName: "Déploiement site Web"
+  dependsOn: DeployInfra
+  jobs:
+  - job: DeployJob
+    pool:
+      name: 'Default'
+    steps:
+
+    # Téléchargement de l’artefact généré dans la phase de Build.
+    - download: current
+      artifact: "Devoir2-win-x64"
+
+    # -------- Déploiement Production --------
+    # Déploie la WebApp directement en production.
+    # Utilisé pour la première mise en ligne du site.
+    # Activé uniquement lorsque firstDeployment = true.
+    - ${{ if eq(variables.gellaDeployment, 'true') }}:
+      - task: AzureWebApp@1
+        displayName: "Déploiement Production"
+        inputs:
+          azureSubscription: '$(AzureSubscription)'
+          appName: '$(webAppName)'
+          package: '$(Pipeline.Workspace)/Devoir2-win-x64/*.zip'
+          resourceGroupName: '$(resourceGroupName)'
+
+     # -------- Déploiement dans le slot Staging --------
+    # Déploie l’application dans le slot "staging".
+    # Permet de tester sans impacter la production.
+    # Activé uniquement lorsque firstDeployment = false.
+    - ${{ if eq(variables.gellaDeployment, 'false') }}:
+      - task: AzureWebApp@1
+        displayName: "Déploiement Staging"
+        inputs:
+          azureSubscription: '$(AzureSubscription)'
+          appName: '$(webAppName)'
+          package: '$(Pipeline.Workspace)/Devoir2-win-x64/*.zip'
+          resourceGroupName: '$(resourceGroupName)'
+          deployToSlotOrASE: true
+          slotName: 'staging'
